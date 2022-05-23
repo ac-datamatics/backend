@@ -1,5 +1,6 @@
 {
   "dependencies": {
     "@aws-amplify/cli": "^8.0.2"
-  }
+  },
+  "type": "module"
 }
