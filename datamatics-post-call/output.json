@@ -1,0 +1,8 @@
+{
+    "audioUri": "/connect/ac-datamatics/call-recordings/2022/05/16/8103502c-ff3b-4fd6-8693-ff883ac097b9_20220516T16:41_UTC.wav",
+    "redactedAudioUri": "/Analysis/Voice/Redacted/2022/05/16/8103502c-ff3b-4fd6-8693-ff883ac097b9_call_recording_redacted_2022-05-16T16:41:57Z.json",
+    "transcriptUri": "",
+    "sentimentAnalysisUri": "/Analysis/Voice/Redacted/2022/05/16/8103502c-ff3b-4fd6-8693-ff883ac097b9_call_recording_redacted_2022-05-16T16:41:57Z.json",
+    "screenRecordingUri": "/connect/ac-datamatics/screen-recordings/2022/05/16/8103502c-ff3b-4fd6-8693-ff883ac097b9_20220516T16:41_UTC.wav",
+    "mergedRecordingUri": "/connect/ac-datamatics/merged-recordings/2022/05/16/8103502c-ff3b-4fd6-8693-ff883ac097b9_20220516T16:41_UTC.wav"
+}
