@@ -22,7 +22,7 @@ const path = `${BUCKET_NAME}/connect/ac-datamatics/CallRecordings/${year}/${mont
 | `.webm` | Client (Frontend) | Audioless recording of the agent's screen. |
 
 ```js
-const path = `${BUCKET_NAME}/ScreenRecordings/Audioless/${year}/${month}/${day}/${contactId}_${year}${month}${day}T${hour}:${minute}_UTC.wav`
+const path = `${BUCKET_NAME}/public/recordings/${contactId}.webm`
 ```
 
 # Processed recordings
