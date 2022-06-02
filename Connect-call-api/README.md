@@ -58,3 +58,7 @@ User: {
     Tags: {}
   }
 }
+
+## Lambnda function
+
+To test the function use Describe_Call lambda function have policy of Connect to Read functions.
