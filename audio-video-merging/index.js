@@ -1,132 +1,228 @@
-const {spawn} = require('child_process');
-var AWS = require('aws-sdk');
-var s3 = new AWS.S3();
+const AWS = require('aws-sdk');
+const s3 = new AWS.S3();
+const db = new AWS.DynamoDB({ apiVersion: '2012-08-10' });
+const connect = new AWS.Connect({  })
 const fsPromise = require('fs').promises;
+const {spawn} = require('child_process')
 
-const BUCKET = 'ac-datamatics'
+const BUCKET = "ac-datamatics";
+const CONNECT_INSTANCE_ID = "148a1752-4bcd-4190-8af9-3bc4124ee5d5";
+/**
+ * Get contact id from S3 path
+ * @param {String} path S3 path to extract id from
+ * @returns {String}
+ */
+const getContactIdFromPath = path => {
+    return path.match(/[^\/|^_]*(?=\.webm|_analysis|_\d*T)/mg)?.[0];
+}
 
-<<<<<<< HEAD
- const downloadFromS3 = async ({
-    s3Path,
-    localPath
- }) => {
-    const data = await s3.getObject({Bucket: BUCKET, Key: s3Path}).promise();
-    return await fsPromise.writeFile(localPath ,data.Body);
- }
+/**
+ * Generates paths to S3 object from contact metadata
+ * @param {{contactId: String, callStartUTCDate: Date}} param0 Data
+ */
+const getPathsFromContactId = ({contactId, callStartUTCDate}) => {
+    const year = callStartUTCDate.getFullYear(), 
+        month = (callStartUTCDate.getMonth() + 1).toString().padStart(2, '0'), 
+        day = callStartUTCDate.getDate().toString().padStart(2, '0'), 
+        hour = callStartUTCDate.getHours().toString().padStart(2, '0'), 
+        minute = callStartUTCDate.getMinutes().toString().padStart(2, '0'), 
+        second = callStartUTCDate.getSeconds().toString().padStart(2, '0');
+    return {
+        audioPath: `connect/ac-datamatics/CallRecordings/${year}/${month}/${day}/${contactId}_${year}${month}${day}T${hour}:${minute}_UTC.wav`,
+        screenRecordingPath: `public/recordings/${contactId}.webm`, 
+        redactedAudioPath: `Analysis/Voice/Redacted/${year}/${month}/${day}/${contactId}_call_recording_redacted_${year}-${month}-${day}T${hour}:${minute}:${second}Z.wav`, 
+        analysisPath: `Analysis/Voice/Redacted/${year}/${month}/${day}/${contactId}_analysis_redacted_${year}-${month}-${day}T${hour}:${minute}:${second}Z.json`,
+        mergedScreenRecordingPath: `connect/ac-datamatics/ScreenRecordings/${contactId}.webm`,
+        captionsPath: `connect/ac-datamatics/Captions/${contactId}.vtt`
+    }
 
+}
 
-const mergeAudioVideo = ({
-    audioLocalPath, 
-    videoLocalPath,
-    outputLocalPath
-}) => new Promise((resolve, reject) => {
-    const command = spawn('ffmpeg', ['-i', audioLocalPath, '-i', videoLocalPath, '-c:v', 'copy', '-c:a', 'aac', outputLocalPath]);
-    command.on('close', (code) => {
-        resolve(code);
+/**
+ * Opens a subprocess to merge video (webm) and audio (wav) using ffmpeg
+ * @param {{audioPath: String, videoPath: String, outputPath: String}} param0 Paths
+ * @returns {Promise<Number>}
+ */
+const mergeAudioAndVideo = async ({audioPath, videoPath, outputPath}) =>
+    new Promise((resolve, reject) => {
+        const command = spawn('ffmpeg', ['-i', audioPath, '-i', videoPath, '-c:a', 'opus', '-strict', '-2', '-y', outputPath]);
+        command.on('close', (code) => {
+            resolve(code);
+        });
     });
-})
 
-const uploadFileToS3 = async({
-    s3Path, 
-    localPath
-}) => {
+
+/**
+ * Downloads a file from a remote path in an S3 bucket into a local path in the current system
+ * @param {{remotePath: String, localPath: String}} param0 remotePath in S3 to fetch object from, and localPath to save file to
+ * @returns {Promise<undefined>}
+ */
+ const downloadFromS3 = async ({remotePath, localPath}) => {
+    const data = await s3.getObject({Bucket: BUCKET, Key: remotePath}).promise();
+    return await fsPromise.writeFile(localPath, data.Body);
+};
+
+/**
+ * Upload a local file to S3
+ * @param {{remotePath: String, localPath: String}} param0 remotePath in S3 to upload object from, and localPath of file to upload
+ * @returns {Promise<AWS.S3.ManagedUpload.SendData>}
+ */
+ const uploadToS3 = async({remotePath, localPath}) => {
     const data = await fsPromise.readFile(localPath);
     return await s3.upload({
         Bucket: BUCKET, 
-        Key: s3Path,
-        Body: data
-=======
-async function getFileFromS3(Key){ 
-    try{
-        const data = await s3.getObject({Bucket: BUCKET, Key}).promise();
-        return data.Body;
-    } catch(e){
-        throw new Error(`Could not retrieve video from S3: ${e.message}`);
-    }
-}
-
-const mergeFiles = (videoFile, audioFile, outputFile) => new Promise((resolve, reject)=>{
-    const command = spawn('ffmpeg', ['-i', videoFile, '-i', audioFile, outputFile]);
-    command.on('close', (code) => {
-        /*if(code == 0) resolve();
-        else reject(code);*/
-        resolve(code);
-    })
-});
-
-const uploadFileToS3 = async (localFilePath, bucketFilePath) => {
-    const file = await fsPromise.readFile(localFilePath);
-    return await s3.upload({
-        Bucket: BUCKET, 
-        Key: bucketFilePath,
-        Body: file
->>>>>>> 65b745e14bb2e6e51197b8f4e242c91fd6643cab
+        Key: remotePath, 
+        Body: data, 
+        ContentType: 'video/webm',
     }).promise();
 }
 
+/**
+ * Checks if a file exists at the specified path on S3
+ * @param {String} remotePath Remote path of file to check
+ * @returns {Promise<Boolean>}
+ */
+const S3FileExists = async (remotePath) => {
+    try{
+        await s3.headObject({ Bucket: BUCKET, Key: remotePath }).promise();
+        return true;
+    } catch(e){
+        return false;
+    }
+}
+
+/**
+ * Reads the content of a JSON file in S3
+ * @param {String} remotePath Path in S3 of file to read
+ * @returns {Promise<Object>}
+ */
+const readS3JSON = async (remotePath) => {
+    const data = await s3.getObject({ Bucket: BUCKET, Key: remotePath }).promise();
+    const body = data.Body.toString();
+    return JSON.parse(body);
+}
+
+/**
+ * Upload a local file to S3
+ * @param {{remotePath: String, localPath: String}} param0 remotePath in S3 to upload object from, and localPath of file to upload
+ * @returns {Promise<AWS.S3.ManagedUpload.SendData>}
+ */
+ const uploadCaptionsToS3 = async({remotePath, localPath}) => {
+    const data = await fsPromise.readFile(localPath);
+    return await s3.upload({
+        Bucket: BUCKET, 
+        Key: remotePath, 
+        Body: data, 
+        ContentType: 'text/vtt',
+    }).promise();
+}
+
+/**
+ * @param {string} text
+ * @param {int} limit 
+ * @returns {string}
+ */
+const adjustLineLength = (text, limit) => {
+    let words = text.split(' ');
+    let res = '';
+    if(words.length > limit) {
+        let i = 0;
+        for(i = 0; i < words.length-limit; i += limit) {
+            res += words.slice(i, i+limit).join(' ') + '\n';
+        }
+        res += words.slice(i).join(' ');
+        return res;
+    } else{
+        return text;
+    }
+}
+
+/**
+ * Returns the timestamp in hours, minutes, and milliseconds
+ * @param {Number} millis The milliseconds
+ * @returns {String}
+ */
+const millisToTimestamp =(millis) => {
+    const hours = Math.floor(millis / 3600000);
+    const minutes = Math.floor(millis / 60000);
+    const seconds =  ((millis % 60000) / 1000).toFixed(3);
+    return hours.toString().padStart(2, '0') + ':' + minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(6, '0');
+}
+
 exports.handler = async (event) => {
-    // Download video
-<<<<<<< HEAD
-    await downloadFromS3({
-        s3Path: 'test/video.mp4',
-        localPath: '/tmp/video.mp4'
-    });
-    // Download audio
-    await downloadFromS3({
-        s3Path: 'test/audio.mp4',
-        localPath: '/tmp/audio.mp4'
-    });
+    const triggerFilePath = event?.Records?.[0]?.s3?.object?.key;
+    const contactId = getContactIdFromPath(triggerFilePath);
+    // Get contact information
+    let c, connectedToAgentTimestamp, initiationTimestamp;
+    try{
+        let c = await connect.describeContact({ContactId: contactId, InstanceId: CONNECT_INSTANCE_ID}).promise();
+        connectedToAgentTimestamp = new Date(c.Contact?.AgentInfo?.ConnectedToAgentTimestamp);
+        initiationTimestamp = new Date(c.Contact?.InitiationTimestamp);
+
+    } catch(e){
+        return {
+            statusCode: 502, 
+            error: JSON.stringify(e),
+            message: "Error fetching info from API"
+        }
+    }
+    // Generate paths (seconds are ambiguous)
+    let paths, audioExists, videoExists;
+    let callStartUTCDate = initiationTimestamp;
+    while(callStartUTCDate <= connectedToAgentTimestamp || !audioExists){
+        paths = getPathsFromContactId({contactId, callStartUTCDate});
+        audioExists = await S3FileExists(paths.redactedAudioPath);
+        videoExists = await S3FileExists(paths.screenRecordingPath);
+        callStartUTCDate.setSeconds(callStartUTCDate.getSeconds()+1); 
+    }
+    // If one does not exists...
+    if(!audioExists || !videoExists){
+        return {
+            statusCode: 404, 
+            error: "Audio or video does not exist",
+            audioPath: paths.redactedAudioPath, 
+            videoPath: paths.screenRecordingPath, 
+            videoExists, audioExists
+        }
+    }
+    // Download files
+    try{
+        await downloadFromS3({remotePath: paths.redactedAudioPath, localPath: '/tmp/audio.wav'});
+        await downloadFromS3({remotePath: paths.screenRecordingPath, localPath: '/tmp/video.webm'});
+    } catch(e){
+        return {
+            statusCode: 500, 
+            error: e, 
+            message: "Error downloading files"
+        }
+    }
     // Merge files
-    const mergeOutputCode = await mergeAudioVideo({
-        audioLocalPath: '/tmp/audio.mp4', 
-        videoLocalPath: '/tmp/video.mp4', 
-        outputLocalPath: '/tmp/output.mp4'
-    })
-    // Upload
-    await uploadFileToS3({
-        s3Path: 'test/out.mp4', 
-        localPath: '/tmp/output.mp4'
-    });
-    
+    try{
+        await mergeAudioAndVideo({ audioPath: '/tmp/audio.wav', videoPath: '/tmp/video.webm', outputPath: '/tmp/output.webm' });
+    } catch(e){
+        return {
+            statusCode: 500, 
+            error: JSON.stringify(e), 
+            message: "Error merging files"
+        }
+    }
+    // Upload files
+    try{
+        await uploadToS3({remotePath: paths.mergedScreenRecordingPath, localPath: '/tmp/output.webm'})
+    } catch(e){
+        return {
+            statusCode: 500, 
+            error: e, 
+            message: "Error uploading files"
+        }
+    }
+
+    // Return success message
     return {
         statusCode: 200, 
         body: {
-            audio: (await fsPromise.stat('/tmp/audio.mp4')).size,
-            video: (await fsPromise.stat('/tmp/video.mp4')).size,
-            merged: (await fsPromise.stat('/tmp/output.mp4')).size, 
-            mergedOutputCode: mergeOutputCode, 
-        }
+            contactId
+        },
+        message: "Video and audio merged correctly"
     }
-=======
-    let videoStream = await getFileFromS3('test/video.mp4');
-    await fsPromise.writeFile('/tmp/video.mp4', videoStream);
-    
-    let audioStream = await getFileFromS3('test/audio.mp4');
-    await fsPromise.writeFile('/tmp/audio.mp4', audioStream);
-    
-    try{
-        await mergeFiles('/tmp/video.mp4', '/tmp/audio.mp4', '/tmp/audio-video.mp4');
-    } catch(e){
-        return {
-            message: "An error occured while merging the files", 
-            error: e
-        }
-    }
-    
-    try{
-        await uploadFileToS3('/tmp/audio-video.mp4', 'test/output.mp4');
-    } catch(e){
-        return {
-            message: "An error occured while uploading the merged file",
-            error: e
-        };
-    }
-    
-    // TODO implement
-    const response = {
-        statusCode: 200,
-        body: "aa",
-    };
-    return response;
->>>>>>> 65b745e14bb2e6e51197b8f4e242c91fd6643cab
-};
+}
