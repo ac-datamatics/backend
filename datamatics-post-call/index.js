@@ -1,127 +1,195 @@
-const BUCKET = 'ac-datamatics';
-const {spawn} = require('child_process');
 const AWS = require('aws-sdk');
 const s3 = new AWS.S3();
-const db = new AWS.DynamoDB({apiVersion: '2012-08-10'});
-const fsPromise = require('fs').promises;
+const db = new AWS.DynamoDB({ apiVersion: '2012-08-10' });
+const connect = new AWS.Connect({  });
+const BUCKET = "ac-datamatics";
+const CONNECT_INSTANCE_ID = "148a1752-4bcd-4190-8af9-3bc4124ee5d5";
 
 /**
- * Generates uri to S3 bucket object from contact metadata
- * @param {{type: String, contactId: String, callStartUTCDate: Date}} param0 Options for generating uri
+ * Get contact id from S3 path
+ * @param {String} path S3 path to extract id from
+ * @returns {String}
  */
-const generateUri = ({type, contactId, callStartUTCDate}) => {
-
-    const month = (callStartUTCDate.getMonth() + 1).toString().padStart(2, '0');
-    const year = callStartUTCDate.getFullYear();
-    const day = (callStartUTCDate.getDate()).toString().padStart(2, '-');
-    const hours = (callStartUTCDate.getHours()).toString().padStart(2, '0');
-    const minutes = (callStartUTCDate.getMinutes()).toString().padStart(2, '0');
-    const seconds = (callStartUTCDate.getSeconds()).toString().padStart(2, '0')
-
-    if(type == 'audioUri') return `connect/ac-datamatics/call-recordings/${year}/${month}/${day}/${contactId}_${year}${month}${day}T${hours}:${minutes}_UTC.wav`;
-    if(type == 'redactedAudioUri') return `Analysis/Voice/Redacted/${year}/${month}/${day}/${contactId}_call_recording_redacted_${year}-${month}-${day}T${hours} ${minutes} ${seconds}Z.wav`;
-    if(type == 'transcriptUri') return ``;
-    if(type == 'sentimentAnalysisUri') return `Analysis/Voice/Redacted/${year}/${month}/${day}/${contactId}_call_recording_redacted_${year}-${month}-${day}T${hours}:${minutes}:${seconds}Z.json`;
-    if(type == 'screenRecordingUri') return `connect/ac-datamatics/screen-recordings/${year}/${month}/${day}/${contactId}_${year}${month}${day}T${hours}:${minutes}_UTC.wav`;
-    if(type == 'mergedRecordingUri') return `connect/ac-datamatics/merged-recordings/${year}/${month}/${day}/${contactId}_${year}${month}${day}T${hours}:${minutes}_UTC.wav`;
-    return '';
+const getContactIdFromPath = path => {
+    console.log(path)
+    return path.match(/[^\/|^_]*(?=\.webm|_analysis|_\d*T)/mg)?.[0];
 }
 
 /**
- * Uploads a new record to database
+ * Generates paths to S3 object from contact metadata
+ * @param {{contactId: String, callStartUTCDate: Date}} param0 Data
+ */
+const getPathsFromContactId = ({contactId, callStartUTCDate}) => {
+    const year = callStartUTCDate.getFullYear(), 
+        month = (callStartUTCDate.getMonth() + 1).toString().padStart(2, '0'), 
+        day = callStartUTCDate.getDate().toString().padStart(2, '0'), 
+        hour = callStartUTCDate.getHours().toString().padStart(2, '0'), 
+        minute = callStartUTCDate.getMinutes().toString().padStart(2, '0'), 
+        second = callStartUTCDate.getSeconds().toString().padStart(2, '0');
+    return {
+        audioPath: `connect/ac-datamatics/CallRecordings/${year}/${month}/${day}/${contactId}_${year}${month}${day}T${hour}:${minute}_UTC.wav`,
+        screenRecordingPath: `public/recordings/${contactId}.webm`, 
+        redactedAudioPath: `Analysis/Voice/Redacted/${year}/${month}/${day}/${contactId}_call_recording_redacted_${year}-${month}-${day}T${hour}:${minute}:${second}Z.wav`, 
+        analysisPath: `Analysis/Voice/Redacted/${year}/${month}/${day}/${contactId}_analysis_redacted_${year}-${month}-${day}T${hour}:${minute}:${second}Z.json`,
+        mergedScreenRecordingPath: `connect/ac-datamatics/ScreenRecordings/${contactId}.webm `
+    }
+}
+/**
+ * Checks if a file exists at the specified path on S3
+ * @param {String} remotePath Remote path of file to check
+ * @returns {Promise<Boolean>}
+ */
+const S3FileExists = async (remotePath) => {
+    try{
+        await s3.headObject({ Bucket: BUCKET, Key: remotePath }).promise();
+        return true;
+    } catch(e){
+        return false;
+    }
+}
+
+/**
+ * Reads the content of a JSON file in S3
+ * @param {String} remotePath Path in S3 of file to read
+ * @returns {Promise<Object>}
+ */
+const readS3JSON = async (remotePath) => {
+    const data = await s3.getObject({ Bucket: BUCKET, Key: remotePath }).promise();
+    const body = data.Body.toString();
+    return JSON.parse(body);
+}
+
+/**
+ * Uploads a new record to the database
  * @param {String} contactId Id of contact
- * @param {{callStartUTCDate: Date, agentId: String, transcriptUri: String, sentimentAnalysisUri: String, mergedRecordingUri: String}} data Data to be stored
+ * @param {{
+ * callStartUTCDate: Date, 
+ * callEndUTCDate: Date
+ * mergedRecordingPath: String, 
+ * analysisPath: String, 
+ * agentId: String, 
+ * queueId: String, 
+ * rating: Number, 
+ * sentimentAgent: Number, 
+ * sentimentCustomer: Number, 
+ * videoExists: Boolean
+ * }} param1 
  */
-const uploadToDatabase = (contactId, data) => new Promise((resolve, reject)=>{
-    const {callStartUTCDate, agentId, transcriptUri, sentimentAnalysisUri, mergedRecordingUri} = data;
-    /*db.putItem({
-        TableName: 'Datamatics',
+const uploadToDatabase = async (contactId,  {
+    callStartUTCDate, 
+    callEndUTCDate,
+    mergedRecordingPath, 
+    analysisPath, 
+    agentUsername,
+    queueId, 
+    rating, 
+    sentimentAgent, 
+    sentimentCustomer, 
+    videoExists,
+    analysisExists
+}) => {
+    return await db.putItem({
+        TableName: 'Datamatics', 
         Item: {
-            contactId: {S: contactId},
-            callStartUTCDate: {S: callStartUTCDate.toISOString()}, 
-            agentId: {S: agentId},
-            transcriptUri: {S: transcriptUri},
-            sentimentAnalysisUri: {S: sentimentAnalysisUri}, 
-            mergedRecordingUri: {S: mergedRecordingUri}, 
-            assignedToAgentIds: {SS: []},
-            watchedByAgentIds: {SS: []}, 
-            likedByAgentIds: {SS: []}
+            contact_id: {S: contactId},
+            callStartUTCDate: {S: callStartUTCDate.toISOString()},
+            callEndUTCDate: {S: callEndUTCDate.toISOString()},
+            // mergedRecordingPath: {S: mergedRecordingPath},
+            // analysisPath: {S: analysisPath},
+            // agentId: {S: agentId},
+            queue_id: {S: queueId},
+            rating: {N: rating.toString()},
+            sentimentAgent: {N: sentimentAgent.toString()},
+            sentimentCustomer: {N: sentimentCustomer.toString()},
+            videoExists: {BOOL: videoExists},
+            analysisExists: {BOOL: analysisExists},
+            uploadDate: {S: new Date().toISOString()},
+            is_assigned: {BOOL: false},
+            //
+            mergedRecordingURL: {S: mergedRecordingPath},
+            analysisURL: {S: analysisPath},
+            // Queue: {S: queueId},
+            agentUsername: {S: agentUsername}, 
+            // Rating: {N: rating.toString()}
         }
-    }, (err, data) => {
-        if(err) reject(err);
-        else resolve(data);
-    })*/
-});
-
-const mergeAudioVideo = async ({audioPath, videoPath, outputPath}) => new Promise((resolve, reject) => {
-    const command = spawn('ffmpeg', ['-i', audioPath, '-i', videoPath, '-c:v', 'copy', '-c:a', 'aac', outputPath]);
-    command.on('close', (code) => {
-        resolve(code);
-    });
-})
-
-/**
- * Downloads a file from a remote path in an S3 bucket into a local path in the current system
- * @param {{remotePath: String, localPath: String}} param0 remotePath in S3 to fetch object from, and localPath to save file to
- * @returns {undefined}
- */
-const downloadFromS3 = async ({remotePath, localPath}) => {
-    const data = await s3.getObject({Bucket: BUCKET, Key: remotePath}).promise();
-    return await fsPromise.writeFile(localPath, data.Body);
-};
-
-/**
- * Upload a local file to S3
- * @param {{remotePath: String, localPath: String}} param0 remotePath in S3 to upload object from, and localPath of file to upload
- * @returns {Promise<AWS.S3.ManagedUpload.SendData>}
- */
-const uploadFileToS3 = async({remotePath, localPath}) => {
-    const data = await fsPromise.readFile(localPath);
-    return await s3.upload({
-        Bucket: BUCKET, 
-        Key: remotePath, 
-        Body: data
     }).promise();
 }
 
+
 exports.handler = async (event) => {
-    // Get and parse data from body
-    let {agentId, contactId, callStartUTCDate} = event;
-    callStartUTCDate = new Date(callStartUTCDate);
-    // Generate uris
-    let uriTypes = ['audioUri', 'redactedAudioUri', 'transcriptUri', 'sentimentAnalysisUri', 'screenRecordingUri', 'mergedRecordingUri'];
-    const uris = {};
-    uriTypes.forEach(type => {
-        uris[type] = generateUri({type, contactId, callStartUTCDate})
-    });
-    // Create db record (set status=processing) (pending)
-    await uploadToDatabase( contactId, {
-        agentId, 
-        callStartUTCDate,
-        transcriptUri: uris['transcriptUri'], 
-        sentimentAnalysisUri: uris['sentimentAnalysisUri'], 
-        mergedRecordingUri: uris['mergedRecordingUri'],
-        uploadDate: new Date(), 
-        status: "processing"
-    } );
-    // Download
+    const triggerFilePath = event?.Records?.[0]?.s3?.object?.key;
+    const contactId = getContactIdFromPath(triggerFilePath);
+    // Get contact information
+    let contact = {};
     try{
-        // Download audio
-        await downloadFromS3({remotePath: uris['redactedAudioUri'], localPath: '/tmp/audio.mp4'});
-        // Download video
-        await downloadFromS3({remotePath: uris['screenRecordingUri'], localPath: '/tmp/video.mp4'});
+        let c = await connect.describeContact({ContactId: contactId, InstanceId: CONNECT_INSTANCE_ID}).promise();
+        contact.connectedToAgentTimestamp = new Date(c.Contact?.AgentInfo?.ConnectedToAgentTimestamp);
+        contact.initiationTimestamp = new Date(c.Contact?.InitiationTimestamp);
+        contact.disconnectTimestamp = new Date(c.Contact?.DisconnectTimestamp);
+        let a = await connect.describeUser({UserId: c.Contact?.AgentInfo.Id, InstanceId: CONNECT_INSTANCE_ID}).promise();
+        contact.agentUsername = a.User?.Username;
+        contact.queueId = c.Contact?.QueueInfo?.Id;
     } catch(e){
-        return e;
+        console.log('fail 502 :(')
+        return {
+            statusCode: 502, 
+            error: e
+        }
     }
-    /*
-    // Merge audio and video
-    await mergeAudioVideo({audioPath: '/tmp/audio.mp4', videoPath: '/tmp/video.mp4', outputPath: '/tmp/output.mp4'});
-    // Save merged audio-video to mergedRecordingUri
-    await uploadFileToS3({remotePath: uris['mergedRecordingUri'], localPath: '/tmp/output.mp4'})
-    */
-     // Update db record (set status = processed)
+    // Generate paths (seconds are ambiguous)
+    let paths, videoExists = false, analysisExists = false;
+    let callStartUTCDate = contact.initiationTimestamp;
+    
+    while(callStartUTCDate <= contact.connectedToAgentTimestamp || !analysisExists){
+        paths = getPathsFromContactId({contactId, callStartUTCDate});
+        videoExists = await S3FileExists(paths.mergedScreenRecordingPath);
+        analysisExists = await S3FileExists(paths.analysisPath);
+        callStartUTCDate.setSeconds(callStartUTCDate.getSeconds()+1);
+    }
+    
+    let rating = 0, sentimentAgent = 0, sentimentCustomer = 0;
+    if(analysisExists){
+        try{
+            // Read file
+            const analysis = await readS3JSON(paths.analysisPath);
+            // Calculate values
+            let initialSentiment = analysis?.ConversationCharacteristics.Sentiment.SentimentByPeriod.QUARTER.CUSTOMER[0].Score;
+            let finalSentiment = analysis?.ConversationCharacteristics.Sentiment.SentimentByPeriod.QUARTER.CUSTOMER[3].Score;
+            rating = Math.max(finalSentiment) - Math.abs(initialSentiment);
+            sentimentAgent = analysis?.ConversationCharacteristics?.Sentiment?.OverallSentiment?.AGENT;
+            sentimentCustomer = analysis?.ConversationCharacteristics?.Sentiment?.OverallSentiment?.CUSTOMER;
+        } catch(e){
+            rating = 0, sentimentAgent = 0, sentimentCustomer = 0;
+        }
+    }
+    // Upload data to db
+    try{
+        await uploadToDatabase(contactId, {
+            callStartUTCDate: contact.initiationTimestamp, 
+            callEndUTCDate: contact.disconnectTimestamp,
+            mergedRecordingPath: paths.mergedScreenRecordingPath, 
+            analysisPath: paths.analysisPath,
+            agentUsername: contact.agentUsername,
+            queueId: contact.queueId, 
+            rating, 
+            sentimentAgent, 
+            sentimentCustomer, 
+            videoExists, 
+            analysisExists
+        })
+    } catch(e){
+        console.log('failed with 500 :(')
+        return {
+            statusCode: 500, 
+            error: e, 
+            message: "Error uploading to DB"
+        }
+    }
+
+    // Return
+    console.log(contactId);
     return {
         statusCode: 200, 
-        body: uris
-    };
+        message: "Success"
+    }
 }
