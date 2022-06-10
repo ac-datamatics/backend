@@ -1,0 +1,327 @@
+{
+    "Version": "1.1.0",
+    "AccountId": "688487247453",
+    "ContentMetadata": {
+        "RedactionTypes": [
+            "PII"
+        ],
+        "Output": "Redacted"
+    },
+    "Channel": "VOICE",
+    "JobStatus": "COMPLETED",
+    "LanguageCode": "en-US",
+    "Participants": [
+        {
+            "ParticipantId": "CUSTOMER",
+            "ParticipantRole": "CUSTOMER"
+        },
+        {
+            "ParticipantId": "AGENT",
+            "ParticipantRole": "AGENT"
+        }
+    ],
+    "Categories": {
+        "MatchedCategories": [],
+        "MatchedDetails": {}
+    },
+    "ConversationCharacteristics": {
+        "TotalConversationDurationMillis": 66700,
+        "Sentiment": {
+            "OverallSentiment": {
+                "AGENT": 1,
+                "CUSTOMER": 1.4
+            },
+            "SentimentByPeriod": {
+                "QUARTER": {
+                    "AGENT": [
+                        {
+                            "BeginOffsetMillis": 0,
+                            "EndOffsetMillis": 16675,
+                            "Score": 2.5
+                        },
+                        {
+                            "BeginOffsetMillis": 16675,
+                            "EndOffsetMillis": 33350,
+                            "Score": 0
+                        },
+                        {
+                            "BeginOffsetMillis": 33350,
+                            "EndOffsetMillis": 50025,
+                            "Score": 0
+                        },
+                        {
+                            "BeginOffsetMillis": 50025,
+                            "EndOffsetMillis": 66700,
+                            "Score": 0
+                        }
+                    ],
+                    "CUSTOMER": [
+                        {
+                            "BeginOffsetMillis": 0,
+                            "EndOffsetMillis": 16477,
+                            "Score": -2.5
+                        },
+                        {
+                            "BeginOffsetMillis": 16477,
+                            "EndOffsetMillis": 32955,
+                            "Score": 0
+                        },
+                        {
+                            "BeginOffsetMillis": 32955,
+                            "EndOffsetMillis": 49432,
+                            "Score": 0
+                        },
+                        {
+                            "BeginOffsetMillis": 49432,
+                            "EndOffsetMillis": 65910,
+                            "Score": 5
+                        }
+                    ]
+                }
+            }
+        },
+        "Interruptions": {
+            "InterruptionsByInterrupter": {},
+            "TotalCount": 0,
+            "TotalTimeMillis": 0
+        },
+        "NonTalkTime": {
+            "TotalTimeMillis": 0,
+            "Instances": []
+        },
+        "TalkSpeed": {
+            "DetailsByParticipant": {
+                "AGENT": {
+                    "AverageWordsPerMinute": 171
+                },
+                "CUSTOMER": {
+                    "AverageWordsPerMinute": 178
+                }
+            }
+        },
+        "TalkTime": {
+            "TotalTimeMillis": 56399,
+            "DetailsByParticipant": {
+                "AGENT": {
+                    "TotalTimeMillis": 34830
+                },
+                "CUSTOMER": {
+                    "TotalTimeMillis": 21569
+                }
+            }
+        }
+    },
+    "CustomModels": [],
+    "Transcript": [
+        {
+            "BeginOffsetMillis": 0,
+            "Content": "Okay.",
+            "EndOffsetMillis": 90,
+            "Id": "3281fb43-7c77-4b42-b2b5-3209a2bad6c9",
+            "ParticipantId": "CUSTOMER",
+            "Sentiment": "NEUTRAL",
+            "LoudnessScore": [
+                59.89
+            ]
+        },
+        {
+            "BeginOffsetMillis": 1600,
+            "Content": "Hello. Thanks for calling. How can I help you?",
+            "EndOffsetMillis": 4540,
+            "Id": "77a573f4-3846-49e4-a0b4-a27c01bae51b",
+            "ParticipantId": "AGENT",
+            "Sentiment": "POSITIVE",
+            "LoudnessScore": [
+                75.98,
+                84.95,
+                83.78,
+                82.73
+            ]
+        },
+        {
+            "BeginOffsetMillis": 5450,
+            "Content": "Hello. I just talked to someone that works with you and he told me that he's not able to give me a friend script. Can you help me or not",
+            "EndOffsetMillis": 12850,
+            "Id": "b33afc45-6020-4f7a-8ee3-023ff56f26a0",
+            "ParticipantId": "CUSTOMER",
+            "Sentiment": "NEGATIVE",
+            "LoudnessScore": [
+                84.3,
+                84.99,
+                85.61,
+                83.3,
+                83.01,
+                82.68,
+                80.88,
+                82.78
+            ],
+            "IssuesDetected": [
+                {
+                    "CharacterOffsets": {
+                        "BeginOffsetChar": 7,
+                        "EndOffsetChar": 112
+                    },
+                    "Text": "I just talked to someone that works with you and he told me that he's not able to give me a friend script"
+                }
+            ]
+        },
+        {
+            "BeginOffsetMillis": 13630,
+            "Content": "Uh uh Yeah, sure. Uh What did that person tell you?",
+            "EndOffsetMillis": 18610,
+            "Id": "168e71d1-98fd-46b5-96dc-59a925ac04cc",
+            "ParticipantId": "AGENT",
+            "Sentiment": "NEUTRAL",
+            "LoudnessScore": [
+                79.99,
+                85.02,
+                85,
+                83.03,
+                86.51,
+                82.36
+            ]
+        },
+        {
+            "BeginOffsetMillis": 19620,
+            "Content": "that he wasn't able to give me a transcript because I am currently in a subject that I haven't finished.",
+            "EndOffsetMillis": 25770,
+            "Id": "0a9b827f-8174-4a80-8394-67d8c19f666e",
+            "ParticipantId": "CUSTOMER",
+            "Sentiment": "NEUTRAL",
+            "LoudnessScore": [
+                77.3,
+                78.81,
+                78,
+                77.78,
+                79.27,
+                77.89,
+                77.38
+            ]
+        },
+        {
+            "BeginOffsetMillis": 26610,
+            "Content": "Oh uh uh well, well that that shouldn't be, please let me check.",
+            "EndOffsetMillis": 30910,
+            "Id": "c8fd5033-f1d3-4fe1-9516-1363dadb018b",
+            "ParticipantId": "AGENT",
+            "Sentiment": "NEUTRAL",
+            "LoudnessScore": [
+                86.58,
+                85.27,
+                81.95,
+                82.05,
+                81.07
+            ]
+        },
+        {
+            "BeginOffsetMillis": 30650,
+            "Content": "Bye 01024.",
+            "EndOffsetMillis": 34650,
+            "Id": "c9442059-d46a-460f-b38a-c7924f776e2f",
+            "ParticipantId": "CUSTOMER",
+            "Sentiment": "NEUTRAL",
+            "LoudnessScore": [
+                60.02,
+                59.25,
+                55.32,
+                85.31,
+                75.5
+            ]
+        },
+        {
+            "BeginOffsetMillis": 30920,
+            "Content": "What is your I. D. Number? Oh, okay. Okay. Okay. It says here that you don't have a subject finished. However, that should not be a problem. We can have it ready by today if that's okay.",
+            "EndOffsetMillis": 50140,
+            "Id": "6e02061a-3193-47cf-886e-cd3fdcee2e24",
+            "ParticipantId": "AGENT",
+            "Sentiment": "NEUTRAL",
+            "LoudnessScore": [
+                81.07,
+                81.97,
+                75.05,
+                56.12,
+                79.99,
+                81.74,
+                75.04,
+                80.98,
+                83.11,
+                83.64,
+                81.59,
+                79.18,
+                83.09,
+                78.79,
+                73.43,
+                78.01,
+                80.36,
+                83.26,
+                82.76,
+                80.85,
+                77.24
+            ]
+        },
+        {
+            "BeginOffsetMillis": 50860,
+            "Content": "Oh, thank you so much.",
+            "EndOffsetMillis": 52390,
+            "Id": "3eab9a6a-5959-4b89-8d75-d8531d21895e",
+            "ParticipantId": "CUSTOMER",
+            "Sentiment": "POSITIVE",
+            "LoudnessScore": [
+                81.23,
+                87.98,
+                87.09
+            ]
+        },
+        {
+            "BeginOffsetMillis": 52500,
+            "Content": "Oh yeah, sure. And we are very sorry for the inconvenience when you come uh to pick up your transcript. We will give you a free sweatshirt.",
+            "EndOffsetMillis": 62450,
+            "Id": "0c69fbad-432b-412f-b084-54fe42864593",
+            "ParticipantId": "AGENT",
+            "Sentiment": "NEUTRAL",
+            "LoudnessScore": [
+                82.62,
+                83.81,
+                83.79,
+                82.04,
+                81.22,
+                81.08,
+                80.66,
+                84.13,
+                82.79,
+                81.97,
+                77.52
+            ]
+        },
+        {
+            "BeginOffsetMillis": 63490,
+            "Content": "Thank you. That sounds great. Goodbye.",
+            "EndOffsetMillis": 65910,
+            "Id": "75808b5c-f4ac-4d43-a23f-ff02427b0f86",
+            "ParticipantId": "CUSTOMER",
+            "Sentiment": "POSITIVE",
+            "LoudnessScore": [
+                84.8,
+                85.55,
+                83.6
+            ]
+        },
+        {
+            "BeginOffsetMillis": 65800,
+            "Content": "Bye bye.",
+            "EndOffsetMillis": 66700,
+            "Id": "91261712-f543-46f9-b802-6441a45f897a",
+            "ParticipantId": "AGENT",
+            "Sentiment": "NEUTRAL",
+            "LoudnessScore": [
+                75.21,
+                80.37
+            ]
+        }
+    ],
+    "CustomerMetadata": {
+        "InputS3Uri": "s3://ac-datamatics/connect/ac-datamatics/CallRecordings/2022/05/30/2d978c08-ed03-405d-85ab-46aba1a6cd92_20220530T21:57_UTC.wav",
+        "ContactId": "2d978c08-ed03-405d-85ab-46aba1a6cd92",
+        "InstanceId": "148a1752-4bcd-4190-8af9-3bc4124ee5d5"
+    }
+}

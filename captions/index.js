@@ -1,0 +1,137 @@
+const AWS = require('aws-sdk');
+const s3 = new AWS.S3();
+const connect = new AWS.Connect({  });
+const fsPromise = require('fs').promises;
+const BUCKET = "ac-datamatics";
+const CONNECT_INSTANCE_ID = "148a1752-4bcd-4190-8af9-3bc4124ee5d5";
+
+/**
+ * Get contact id from S3 path
+ * @param {String} path S3 path to extract id from
+ * @returns {String}
+ */
+const getContactIdFromPath = path => {
+    return path.match(/[^\/|^_]*(?=\.webm|_analysis|_\d*T)/mg)?.[0];
+}
+
+/**
+ * Generates paths to S3 object from contact metadata
+ * @param {{contactId: String, callStartUTCDate: Date}} param0 Data
+ */
+const getPathsFromContactId = ({contactId, callStartUTCDate}) => {
+    const year = callStartUTCDate.getFullYear(), 
+        month = (callStartUTCDate.getMonth() + 1).toString().padStart(2, '0'), 
+        day = callStartUTCDate.getDate().toString().padStart(2, '0'), 
+        hour = callStartUTCDate.getHours().toString().padStart(2, '0'), 
+        minute = callStartUTCDate.getMinutes().toString().padStart(2, '0'), 
+        second = callStartUTCDate.getSeconds().toString().padStart(2, '0');
+    return {
+        audioPath: `connect/ac-datamatics/CallRecordings/${year}/${month}/${day}/${contactId}_${year}${month}${day}T${hour}:${minute}_UTC.wav`,
+        screenRecordingPath: `public/recordings/${contactId}.webm`, 
+        redactedAudioPath: `Analysis/Voice/Redacted/${year}/${month}/${day}/${contactId}_call_recording_redacted_${year}-${month}-${day}T${hour}:${minute}:${second}Z.wav`, 
+        analysisPath: `Analysis/Voice/Redacted/${year}/${month}/${day}/${contactId}_analysis_redacted_${year}-${month}-${day}T${hour}:${minute}:${second}Z.json`,
+        mergedScreenRecordingPath: `connect/ac-datamatics/ScreenRecordings/${contactId}.webm`,
+        captionsPath: `connect/ac-datamatics/Captions/${contactId}.vtt`
+    }
+}
+
+/**
+ * Checks if a file exists at the specified path on S3
+ * @param {String} remotePath Remote path of file to check
+ * @returns {Promise<Boolean>}
+ */
+const S3FileExists = async (remotePath) => {
+    try{
+        await s3.headObject({ Bucket: BUCKET, Key: remotePath }).promise();
+        return true;
+    } catch(e){
+        return false;
+    }
+}
+
+/**
+ * Reads the content of a JSON file in S3
+ * @param {String} remotePath Path in S3 of file to read
+ * @returns {Promise<Object>}
+ */
+const readS3JSON = async (remotePath) => {
+    const data = await s3.getObject({ Bucket: BUCKET, Key: remotePath }).promise();
+    const body = data.Body.toString();
+    return JSON.parse(body);
+}
+
+/**
+ * Upload a local file to S3
+ * @param {{remotePath: String, localPath: String}} param0 remotePath in S3 to upload object from, and localPath of file to upload
+ * @returns {Promise<AWS.S3.ManagedUpload.SendData>}
+ */
+ const uploadCaptionsToS3 = async({remotePath, localPath}) => {
+    const data = await fsPromise.readFile(localPath);
+    return await s3.upload({
+        Bucket: BUCKET, 
+        Key: remotePath, 
+        Body: data, 
+        ContentType: 'text/vtt',
+    }).promise();
+}
+
+/**
+ * @param {string} text
+ * @param {int} limit 
+ * @returns {string}
+ */
+const adjustLineLength = (text, limit) => {
+    let words = text.toString().split(' ');
+    let res = '';
+    if(words.length > limit) {
+        let i = 0;
+        for(i = 0; i < words.length-limit; i += limit) {
+            res += words.slice(i, i+limit).join(' ') + '\n';
+        }
+        res += words.slice(i).join(' ');
+        return res;
+    } else{
+        return text;
+    }
+}
+
+/**
+ * Returns the timestamp in hours, minutes, and milliseconds
+ * @param {Number} millis The milliseconds
+ * @returns {String}
+ */
+const millisToTimestamp =(millis) => {
+    const hours = Math.floor(millis / 3600000);
+    const minutes = Math.floor(millis / 60000);
+    const seconds =  ((millis % 60000) / 1000).toFixed(3);
+    return hours.toString().padStart(2, '0') + ':' + minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(6, '0');
+}
+
+exports.handler = async (event) => {
+    // 
+    const contactLensKey = event?.Records?.[0]?.s3?.object?.key;
+    const contactId = getContactIdFromPath(contactLensKey);
+    const analysis = await readS3JSON(contactLensKey);
+    let result = 'WEBVTT\n\n';
+
+    analysis.Transcript.forEach((block, i) => {
+        if(!block.Content) return;
+        const t1 = millisToTimestamp(block.BeginOffsetMillis);
+        const t2 = millisToTimestamp(block.EndOffsetMillis);
+    
+        result += `${i+1}\n${t1} --> ${t2}\n[${block.ParticipantId}] ${adjustLineLength(block.Content, 8)}\n\n`;
+    });
+    
+    let captionsPath = `connect/ac-datamatics/Captions/${contactId}.vtt`
+    
+    await fsPromise.writeFile('/tmp/output.vtt', result);
+    
+    await uploadCaptionsToS3({ remotePath: captionsPath, localPath: '/tmp/output.vtt' })
+    
+    console.log(contactId);
+    
+    return {
+        statusCode: 200, 
+        message: "Success, captions generated"
+    };
+}
