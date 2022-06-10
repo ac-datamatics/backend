@@ -31,7 +31,7 @@ const getPathsFromContactId = ({contactId, callStartUTCDate}) => {
         screenRecordingPath: `public/recordings/${contactId}.webm`, 
         redactedAudioPath: `Analysis/Voice/Redacted/${year}/${month}/${day}/${contactId}_call_recording_redacted_${year}-${month}-${day}T${hour}:${minute}:${second}Z.wav`, 
         analysisPath: `Analysis/Voice/Redacted/${year}/${month}/${day}/${contactId}_analysis_redacted_${year}-${month}-${day}T${hour}:${minute}:${second}Z.json`,
-        mergedScreenRecordingPath: `connect/ac-datamatics/ScreenRecordings/${contactId}.webm `
+        mergedScreenRecordingPath: `connect/ac-datamatics/ScreenRecordings/${contactId}.webm`
     }
 }
 /**
@@ -68,11 +68,10 @@ const readS3JSON = async (remotePath) => {
  * mergedRecordingPath: String, 
  * analysisPath: String, 
  * agentId: String, 
- * queueId: String, 
+ * queueName: String, 
  * rating: Number, 
  * sentimentAgent: Number, 
  * sentimentCustomer: Number, 
- * videoExists: Boolean
  * }} param1 
  */
 const uploadToDatabase = async (contactId,  {
@@ -81,12 +80,10 @@ const uploadToDatabase = async (contactId,  {
     mergedRecordingPath, 
     analysisPath, 
     agentUsername,
-    queueId, 
+    queueName, 
     rating, 
     sentimentAgent, 
     sentimentCustomer, 
-    videoExists,
-    analysisExists
 }) => {
     return await db.putItem({
         TableName: 'Datamatics', 
@@ -97,12 +94,10 @@ const uploadToDatabase = async (contactId,  {
             // mergedRecordingPath: {S: mergedRecordingPath},
             // analysisPath: {S: analysisPath},
             // agentId: {S: agentId},
-            queue_id: {S: queueId},
+            queue_name: {S: queueName},
             rating: {N: rating.toString()},
             sentimentAgent: {N: sentimentAgent.toString()},
             sentimentCustomer: {N: sentimentCustomer.toString()},
-            videoExists: {BOOL: videoExists},
-            analysisExists: {BOOL: analysisExists},
             uploadDate: {S: new Date().toISOString()},
             is_assigned: {BOOL: false},
             //
@@ -128,21 +123,24 @@ exports.handler = async (event) => {
         contact.disconnectTimestamp = new Date(c.Contact?.DisconnectTimestamp);
         let a = await connect.describeUser({UserId: c.Contact?.AgentInfo.Id, InstanceId: CONNECT_INSTANCE_ID}).promise();
         contact.agentUsername = a.User?.Username;
-        contact.queueId = c.Contact?.QueueInfo?.Id;
+        let queueid = c.Contact?.QueueInfo?.Id; 
+        console.log(queueid);
+        let n = await connect.describeQueue({InstanceId: CONNECT_INSTANCE_ID, QueueId: queueid}).promise();
+        contact.queueName = n.Queue?.Name;
+        console.log(n);
+        console.log(contact.queueName);
     } catch(e){
-        console.log('fail 502 :(')
         return {
             statusCode: 502, 
             error: e
         }
     }
     // Generate paths (seconds are ambiguous)
-    let paths, videoExists = false, analysisExists = false;
+    let paths, analysisExists = false;
     let callStartUTCDate = contact.initiationTimestamp;
     
     while(callStartUTCDate <= contact.connectedToAgentTimestamp || !analysisExists){
         paths = getPathsFromContactId({contactId, callStartUTCDate});
-        videoExists = await S3FileExists(paths.mergedScreenRecordingPath);
         analysisExists = await S3FileExists(paths.analysisPath);
         callStartUTCDate.setSeconds(callStartUTCDate.getSeconds()+1);
     }
@@ -170,15 +168,12 @@ exports.handler = async (event) => {
             mergedRecordingPath: paths.mergedScreenRecordingPath, 
             analysisPath: paths.analysisPath,
             agentUsername: contact.agentUsername,
-            queueId: contact.queueId, 
+            queueName: contact.queueName, 
             rating, 
             sentimentAgent, 
             sentimentCustomer, 
-            videoExists, 
-            analysisExists
         })
     } catch(e){
-        console.log('failed with 500 :(')
         return {
             statusCode: 500, 
             error: e, 
