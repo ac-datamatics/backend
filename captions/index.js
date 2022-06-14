@@ -45,6 +45,7 @@ const S3FileExists = async (remotePath) => {
         await s3.headObject({ Bucket: BUCKET, Key: remotePath }).promise();
         return true;
     } catch(e){
+        console.log('404');
         return false;
     }
 }
@@ -61,16 +62,15 @@ const readS3JSON = async (remotePath) => {
 }
 
 /**
- * Upload a local file to S3
- * @param {{remotePath: String, localPath: String}} param0 remotePath in S3 to upload object from, and localPath of file to upload
- * @returns {Promise<AWS.S3.ManagedUpload.SendData>}
+ * Upload string to an S3 VTT file
+ * @param {String} str Content of the file
+ * @param {String} remotePath Key of file to upload
  */
- const uploadCaptionsToS3 = async({remotePath, localPath}) => {
-    const data = await fsPromise.readFile(localPath);
+const uploadCaptionsToS3 = async (str, remotePath) => {
     return await s3.upload({
         Bucket: BUCKET, 
         Key: remotePath, 
-        Body: data, 
+        Body: str, 
         ContentType: 'text/vtt',
     }).promise();
 }
@@ -114,19 +114,25 @@ exports.handler = async (event) => {
     const analysis = await readS3JSON(contactLensKey);
     let result = 'WEBVTT\n\n';
 
-    analysis.Transcript.forEach((block, i) => {
-        if(!block.Content) return;
-        const t1 = millisToTimestamp(block.BeginOffsetMillis);
-        const t2 = millisToTimestamp(block.EndOffsetMillis);
+    try {
+        analysis.Transcript.forEach((block, i) => {
+            if(!block.Content) return;
+            const t1 = millisToTimestamp(block.BeginOffsetMillis);
+            const t2 = millisToTimestamp(block.EndOffsetMillis);
+        
+            result += `${i+1}\n${t1} --> ${t2}\n[${block.ParticipantId}] ${adjustLineLength(block.Content, 8)}\n\n`;
+        });
+    } catch(err) {
+        console.log(contactId);
+        return {
+            statusCode: 501,
+            message: err.message
+        }
+    }
     
-        result += `${i+1}\n${t1} --> ${t2}\n[${block.ParticipantId}] ${adjustLineLength(block.Content, 8)}\n\n`;
-    });
-    
-    let captionsPath = `connect/ac-datamatics/Captions/${contactId}.vtt`
-    
-    await fsPromise.writeFile('/tmp/output.vtt', result);
-    
-    await uploadCaptionsToS3({ remotePath: captionsPath, localPath: '/tmp/output.vtt' })
+    let captionsPath = `connect/ac-datamatics/Captions/${contactId}.vtt`;
+
+    await uploadCaptionsToS3(result, captionsPath);
     
     console.log(contactId);
     
