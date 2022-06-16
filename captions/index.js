@@ -12,43 +12,7 @@ const CONNECT_INSTANCE_ID = "148a1752-4bcd-4190-8af9-3bc4124ee5d5";
  */
 const getContactIdFromPath = path => {
     return path.match(/[^\/|^_]*(?=\.webm|_analysis|_\d*T)/mg)?.[0];
-}
-
-/**
- * Generates paths to S3 object from contact metadata
- * @param {{contactId: String, callStartUTCDate: Date}} param0 Data
- */
-const getPathsFromContactId = ({contactId, callStartUTCDate}) => {
-    const year = callStartUTCDate.getFullYear(), 
-        month = (callStartUTCDate.getMonth() + 1).toString().padStart(2, '0'), 
-        day = callStartUTCDate.getDate().toString().padStart(2, '0'), 
-        hour = callStartUTCDate.getHours().toString().padStart(2, '0'), 
-        minute = callStartUTCDate.getMinutes().toString().padStart(2, '0'), 
-        second = callStartUTCDate.getSeconds().toString().padStart(2, '0');
-    return {
-        audioPath: `connect/ac-datamatics/CallRecordings/${year}/${month}/${day}/${contactId}_${year}${month}${day}T${hour}:${minute}_UTC.wav`,
-        screenRecordingPath: `public/recordings/${contactId}.webm`, 
-        redactedAudioPath: `Analysis/Voice/Redacted/${year}/${month}/${day}/${contactId}_call_recording_redacted_${year}-${month}-${day}T${hour}:${minute}:${second}Z.wav`, 
-        analysisPath: `Analysis/Voice/Redacted/${year}/${month}/${day}/${contactId}_analysis_redacted_${year}-${month}-${day}T${hour}:${minute}:${second}Z.json`,
-        mergedScreenRecordingPath: `connect/ac-datamatics/ScreenRecordings/${contactId}.webm`,
-        captionsPath: `connect/ac-datamatics/Captions/${contactId}.vtt`
-    }
-}
-
-/**
- * Checks if a file exists at the specified path on S3
- * @param {String} remotePath Remote path of file to check
- * @returns {Promise<Boolean>}
- */
-const S3FileExists = async (remotePath) => {
-    try{
-        await s3.headObject({ Bucket: BUCKET, Key: remotePath }).promise();
-        return true;
-    } catch(e){
-        console.log('404');
-        return false;
-    }
-}
+};
 
 /**
  * Reads the content of a JSON file in S3
@@ -59,7 +23,7 @@ const readS3JSON = async (remotePath) => {
     const data = await s3.getObject({ Bucket: BUCKET, Key: remotePath }).promise();
     const body = data.Body.toString();
     return JSON.parse(body);
-}
+};
 
 /**
  * Upload string to an S3 VTT file
@@ -73,7 +37,7 @@ const uploadCaptionsToS3 = async (str, remotePath) => {
         Body: str, 
         ContentType: 'text/vtt',
     }).promise();
-}
+};
 
 /**
  * @param {string} text
@@ -93,7 +57,7 @@ const adjustLineLength = (text, limit) => {
     } else{
         return text;
     }
-}
+};
 
 /**
  * Returns the timestamp in hours, minutes, and milliseconds
@@ -105,36 +69,27 @@ const millisToTimestamp =(millis) => {
     const minutes = Math.floor(millis / 60000);
     const seconds =  ((millis % 60000) / 1000).toFixed(3);
     return hours.toString().padStart(2, '0') + ':' + minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(6, '0');
-}
+};
 
 exports.handler = async (event) => {
     // 
-    const contactLensKey = event?.Records?.[0]?.s3?.object?.key;
+    const contactLensKey = event?.Records?.[0]?.s3?.object?.key.replace(/\+/g, ' ');
+    console.log(contactLensKey);
     const contactId = getContactIdFromPath(contactLensKey);
     const analysis = await readS3JSON(contactLensKey);
     let result = 'WEBVTT\n\n';
 
-    try {
-        analysis.Transcript.forEach((block, i) => {
-            if(!block.Content) return;
-            const t1 = millisToTimestamp(block.BeginOffsetMillis);
-            const t2 = millisToTimestamp(block.EndOffsetMillis);
-        
-            result += `${i+1}\n${t1} --> ${t2}\n[${block.ParticipantId}] ${adjustLineLength(block.Content, 8)}\n\n`;
-        });
-    } catch(err) {
-        console.log(contactId);
-        return {
-            statusCode: 501,
-            message: err.message
-        }
-    }
+    analysis.Transcript.forEach((block, i) => {
+        if(!block.Content) return;
+        const t1 = millisToTimestamp(block.BeginOffsetMillis);
+        const t2 = millisToTimestamp(block.EndOffsetMillis);
     
+        result += `${i+1}\n${t1} --> ${t2}\n[${block.ParticipantId}] ${adjustLineLength(block.Content, 8)}\n\n`;
+    });
+
     let captionsPath = `connect/ac-datamatics/Captions/${contactId}.vtt`;
 
     await uploadCaptionsToS3(result, captionsPath);
-    
-    console.log(contactId);
     
     return {
         statusCode: 200, 
