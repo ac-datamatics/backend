@@ -73,7 +73,7 @@ const millisToTimestamp =(millis) => {
 
 exports.handler = async (event) => {
     // 
-    const contactLensKey = event?.Records?.[0]?.s3?.object?.key.replace(/\+/g, ' ');
+    const contactLensKey = event?.Records?.[0]?.s3?.object?.key.replace(/[\+%]+/g, ' ');
     console.log(contactLensKey);
     const contactId = getContactIdFromPath(contactLensKey);
     const analysis = await readS3JSON(contactLensKey);
